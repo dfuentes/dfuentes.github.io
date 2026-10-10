@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Countdown</title>
+<style>
+  :root {
+    --on: #2bff4a;
+    --off: rgba(43, 255, 74, 0.07);
+    --bg: #0a0a0a;
+    /* Digit height scales to fit ~9 digits + 3 colons across the viewport. */
+    --h: min(12.5vw, 60vh);
+    --w: calc(var(--h) * 0.55);
+    --t: calc(var(--h) * 0.1);   /* segment thickness */
+    --g: calc(var(--t) * 0.12);  /* gap between segments */
+  }
+
+  html, body { height: 100%; margin: 0; }
+
+  body {
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .display {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--h) * 0.1);
+    transform: skewX(-6deg);
+    filter: drop-shadow(0 0 calc(var(--t) * 0.6) rgba(43, 255, 74, 0.55));
+  }
+
+  .digit {
+    position: relative;
+    width: var(--w);
+    height: var(--h);
+  }
+
+  .seg {
+    position: absolute;
+    background: var(--off);
+    transition: background-color 0.08s;
+  }
+  .seg.on { background: var(--on); }
+
+  /* Horizontal segments: a (top), g (middle), d (bottom) */
+  .a, .g, .d {
+    left: calc(var(--t) / 2 + var(--g));
+    width: calc(var(--w) - var(--t) - 2 * var(--g));
+    height: var(--t);
+    clip-path: polygon(
+      calc(var(--t) / 2) 0, calc(100% - var(--t) / 2) 0, 100% 50%,
+      calc(100% - var(--t) / 2) 100%, calc(var(--t) / 2) 100%, 0 50%);
+  }
+  .a { top: 0; }
+  .g { top: calc(var(--h) / 2 - var(--t) / 2); }
+  .d { bottom: 0; }
+
+  /* Vertical segments: f/b (upper left/right), e/c (lower left/right) */
+  .b, .c, .e, .f {
+    width: var(--t);
+    height: calc(var(--h) / 2 - var(--t) / 2 - 2 * var(--g));
+    clip-path: polygon(
+      50% 0, 100% calc(var(--t) / 2), 100% calc(100% - var(--t) / 2),
+      50% 100%, 0 calc(100% - var(--t) / 2), 0 calc(var(--t) / 2));
+  }
+  .f, .e { left: 0; }
+  .b, .c { right: 0; }
+  .f, .b { top: calc(var(--t) / 2 + var(--g)); }
+  .e, .c { top: calc(var(--h) / 2 + var(--g)); }
+
+  .colon {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: calc(var(--h) * 0.3);
+    height: var(--h);
+  }
+  .colon span {
+    width: var(--t);
+    height: var(--t);
+    background: var(--on);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="display" id="display" aria-hidden="true"></div>
+  <p class="sr-only" id="readout" aria-live="off"></p>
+</main>
+<script>
+  // Noon, September 1, 2028, in the viewer's local time zone.
+  const TARGET = new Date(2028, 8, 1, 12, 0, 0).getTime();
+
+  const SEGMENTS = {
+    0: "abcdef", 1: "bc", 2: "abdeg", 3: "abcdg", 4: "bcfg",
+    5: "acdfg", 6: "acdefg", 7: "abc", 8: "abcdefg", 9: "abcdfg",
+  };
+
+  const display = document.getElementById("display");
+  const readout = document.getElementById("readout");
+  const digits = [];
+
+  // Layout: DDD:HH:MM:SS
+  for (const groupSize of [3, 2, 2, 2]) {
+    if (digits.length) {
+      const colon = document.createElement("div");
+      colon.className = "colon";
+      colon.innerHTML = "<span></span><span></span>";
+      display.appendChild(colon);
+    }
+    for (let i = 0; i < groupSize; i++) {
+      const digit = document.createElement("div");
+      digit.className = "digit";
+      const segs = {};
+      for (const s of "abcdefg") {
+        const el = document.createElement("span");
+        el.className = "seg " + s;
+        digit.appendChild(el);
+        segs[s] = el;
+      }
+      display.appendChild(digit);
+      digits.push(segs);
+    }
+  }
+
+  function render() {
+    const total = Math.max(0, Math.floor((TARGET - Date.now()) / 1000));
+    const d = Math.floor(total / 86400);
+    const h = Math.floor(total / 3600) % 24;
+    const m = Math.floor(total / 60) % 60;
+    const s = total % 60;
+
+    const text = String(Math.min(d, 999)).padStart(3, "0") +
+      String(h).padStart(2, "0") +
+      String(m).padStart(2, "0") +
+      String(s).padStart(2, "0");
+
+    [...text].forEach((ch, i) => {
+      const lit = SEGMENTS[ch];
+      for (const seg in digits[i]) {
+        digits[i][seg].classList.toggle("on", lit.includes(seg));
+      }
+    });
+
+    readout.textContent = `${d} days, ${h} hours, ${m} minutes, ${s} seconds remaining`;
+
+    // Re-render just after the next whole second.
+    setTimeout(render, 1000 - (Date.now() % 1000) + 10);
+  }
+
+  render();
+</script>
+</body>
+</html>
